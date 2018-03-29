@@ -86,18 +86,19 @@ message:
 '''
 
 from ansible.module_utils.basic import AnsibleModule
+from time import sleep
 import jenkins
 
 def run_module():
         module_args = dict(
                 name=dict(type='str', required=True),
                 url=dict(type='str', required=False, default='http://localhost:8080'),
-                url_password=dict(type='str', required=False, no_log=True),
-                url_username=dict(type='str', required=False),
+                url_password=dict(type='str', required=True, no_log=True),
+                url_username=dict(type='str', required=True),
                 state=dict(type='str', required=False, default='present'),
                 enabled=dict(type='bool', required=False, default='yes'),
-                remoteFS=dict(type='str', required=False),
-                params=dict(type='dict', required=False)
+                remoteFS=dict(type='str', required=False, default='/opt'),
+                params=dict(type='dict', required=False, default={})
         )     
 
         result = dict(changed=False, message='')
@@ -114,7 +115,7 @@ def run_module():
         if module.params['state'] == 'present'.lower():
                 if server.node_exists(module.params['name']): 
                         result['changed'] = False
-                        result['message'] = "Node already exists"
+                        result['message'] += "Node already exists |"
                 else:
                         server.create_node(
                                 module.params['name'],
@@ -124,17 +125,21 @@ def run_module():
                                 exclusive=False,
                                 launcher=jenkins.LAUNCHER_SSH,
                                 launcher_params=module.params['params'])
+			result['message'] += "Node has been created |"
                         result['changed'] = True
 
                 status=(False if server.get_node_info(module.params['name'], depth=0)['offline'] else True)
-                result['message']=result['message']+" Status="+str(status)
+		sleep (3) # Delay to starting node
                 if module.params['enabled'] > status:
+			result['message'] +=" Node has been enabled |"
                         server.enable_node(module.params['name'])
                         result['changed'] = True
                 elif module.params['enabled'] < status:
+			result['message'] += " Node has been disabled |"
                         server.disable_node(module.params['name'])
                         result['changed'] = True
-                else: result['changed'] = False
+                else:
+			result['changed'] = False
 
         if module.params['state'] == 'absent'.lower():
                 if not server.node_exists(module.params['name']):
@@ -142,6 +147,7 @@ def run_module():
                         result['message'] = "Node does not exists"
                 else:
                         server.delete_node(module.params['name'])
+			result['message'] = "Node has been removed"
                         result['changed'] = True
 
         module.exit_json(**result)
